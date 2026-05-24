@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Brazil 1872 Census: Occupations and Sectors</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; }
+#sidebar {
+  width: 300px; min-width: 300px; padding: 20px; background: #f8f8f8;
+  border-right: 1px solid #ddd; overflow-y: auto;
+}
+#sidebar h1 { font-size: 16px; margin-bottom: 16px; line-height: 1.3; }
+#sidebar label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 13px; }
+#sidebar select, #sidebar .radio-group { width: 100%; }
+#sidebar select { padding: 6px 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+.radio-group label { display: inline-block; font-weight: normal; margin-right: 12px; cursor: pointer; }
+.radio-group input { margin-right: 3px; }
+.note { font-size: 11px; color: #666; margin-top: 16px; line-height: 1.4; }
+#main { flex: 1; display: flex; flex-direction: column; }
+#map { flex: 1; }
+#table-container { height: 280px; overflow-y: auto; border-top: 1px solid #ddd; padding: 12px; }
+#table-container h3 { font-size: 14px; margin-bottom: 8px; }
+#top-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+#top-table th, #top-table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
+#top-table th { background: #f0f0f0; font-weight: 600; }
+#loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; color: #666; z-index: 1000; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>Brazil 1872 Census: Occupations and Sectors</h1>
+
+  <label>Geographic level</label>
+  <div class="radio-group">
+    <label><input type="radio" name="geo" value="Municipality" checked> Municipality</label>
+    <label><input type="radio" name="geo" value="State"> State</label>
+  </div>
+
+  <label>Analysis type</label>
+  <div class="radio-group">
+    <label><input type="radio" name="groupType" value="Occupation"> Occupation</label>
+    <label><input type="radio" name="groupType" value="Sector" checked> Sector</label>
+  </div>
+
+  <label id="group-label">Sector</label>
+  <select id="group-select"></select>
+
+  <label>Map metric</label>
+  <select id="metric-select"></select>
+
+  <p class="note">
+    Note: literacy and enslaved population rates are mapped as population-level
+    contextual rates because the census variables do not cross-tab these by
+    occupation or sector.
+  </p>
+</div>
+
+<div id="main">
+  <div id="map"><div id="loading">Loading data...</div></div>
+  <div id="table-container">
+    <h3>Top geographies for selected metric</h3>
+    <table id="top-table"><tbody></tbody></table>
+  </div>
+</div>
+
+<script>
+const METRICS = [
+  { label: "Share of occupations", col: "share_of_all_occupations", numCol: "n_total", denCol: "occ_total", numLabel: "Total in group", denLabel: "Total occupations" },
+  { label: "Free share within group", col: "share_free_within_group", numCol: "n_free", denCol: "n_total", numLabel: "Free in group", denLabel: "Total in group" },
+  { label: "Enslaved share within group", col: "share_enslaved_within_group", numCol: "n_enslaved", denCol: "n_total", numLabel: "Enslaved in group", denLabel: "Total in group" },
+  { label: "Male share within group", col: "share_male_within_group", numCol: "n_male", denCol: "n_total", numLabel: "Male in group", denLabel: "Total in group" },
+  { label: "Female share within group", col: "share_female_within_group", numCol: "n_female", denCol: "n_total", numLabel: "Female in group", denLabel: "Total in group" },
+  { label: "Population literacy rate", col: "literacy_rate_population", numCol: "pop_literate", denCol: "pop_total", numLabel: "Literate population", denLabel: "Total population" },
+  { label: "Enslaved population rate", col: "enslaved_rate_population", numCol: "pop_enslaved", denCol: "pop_total", numLabel: "Enslaved population", denLabel: "Total population" },
+  { label: "Share of national occupations", col: "share_of_national_occupations", numCol: "n_total", denCol: "n_total_national", numLabel: "Total in group", denLabel: "National total in group" },
+  { label: "Free share of national group", col: "share_free_of_national_group", numCol: "n_free", denCol: "n_free_national", numLabel: "Free in group", denLabel: "National free in group" },
+  { label: "Enslaved share of national group", col: "share_enslaved_of_national_group", numCol: "n_enslaved", denCol: "n_enslaved_national", numLabel: "Enslaved in group", denLabel: "National enslaved in group" },
+  { label: "Male share of national group", col: "share_male_of_national_group", numCol: "n_male", denCol: "n_male_national", numLabel: "Male in group", denLabel: "National male in group" },
+  { label: "Female share of national group", col: "share_female_of_national_group", numCol: "n_female", denCol: "n_female_national", numLabel: "Female in group", denLabel: "National female in group" },
+  { label: "Literacy rate of national population", col: "literacy_rate_of_national_pop", numCol: "pop_literate", denCol: "pop_literate_national", numLabel: "Literate population", denLabel: "National literate population" },
+  { label: "Enslaved rate of national population", col: "enslaved_rate_of_national_pop", numCol: "pop_enslaved", denCol: "pop_enslaved_national", numLabel: "Enslaved population", denLabel: "National enslaved population" }
+];
+
+let panelData, munGeo, stateGeo, map, geoLayer, legend;
+let panelRows = [];
+
+function fmtPct(v) { return v == null || isNaN(v) ? "No data" : (v * 100).toFixed(1) + "%"; }
+function fmtNum(v) { return v == null || isNaN(v) ? "No data" : Math.round(v).toLocaleString(); }
+
+function columnarToRows(col) {
+  const n = col.gl.length;
+  const rows = new Array(n);
+  const keys = Object.keys(col);
+  for (let i = 0; i < n; i++) {
+    const r = {};
+    for (const k of keys) r[k] = col[k][i];
+    rows[i] = r;
+  }
+  return rows;
+}
+
+function getGeo() { return document.querySelector('input[name="geo"]:checked').value; }
+function getGroupType() { return document.querySelector('input[name="groupType"]:checked').value; }
+function getGroupId() { return document.getElementById("group-select").value; }
+function getMetricCol() { return document.getElementById("metric-select").value; }
+function getMetricDef() { return METRICS.find(m => m.col === getMetricCol()); }
+
+function populateMetrics() {
+  const sel = document.getElementById("metric-select");
+  sel.innerHTML = "";
+  for (const m of METRICS) {
+    const opt = document.createElement("option");
+    opt.value = m.col;
+    opt.textContent = m.label;
+    sel.appendChild(opt);
+  }
+}
+
+function populateGroups() {
+  const gt = getGroupType();
+  const gl = getGeo();
+  document.getElementById("group-label").textContent = gt;
+  const seen = new Map();
+  for (const r of panelRows) {
+    if (r.gt === gt && r.gl === gl && !seen.has(r.grid)) {
+      seen.set(r.grid, r.glab);
+    }
+  }
+  const sorted = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  const sel = document.getElementById("group-select");
+  sel.innerHTML = "";
+  for (const [id, label] of sorted) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = label;
+    sel.appendChild(opt);
+  }
+}
+
+function getFilteredPanel() {
+  const gl = getGeo();
+  const gt = getGroupType();
+  const grid = getGroupId();
+  const lookup = new Map();
+  for (const r of panelRows) {
+    if (r.gl === gl && r.gt === gt && r.grid === grid) {
+      lookup.set(r.gid, r);
+    }
+  }
+  return lookup;
+}
+
+function getColorScale(values) {
+  const valid = values.filter(v => v != null && !isNaN(v));
+  if (valid.length === 0) return { min: 0, max: 1 };
+  return { min: Math.min(...valid), max: Math.max(...valid) };
+}
+
+function interpolateYlGnBu(t) {
+  const colors = [
+    [255, 255, 217], [237, 248, 177], [199, 233, 180],
+    [127, 205, 187], [65, 182, 196], [29, 145, 192],
+    [34, 94, 168], [37, 52, 148], [8, 29, 88]
+  ];
+  t = Math.max(0, Math.min(1, t));
+  const idx = t * (colors.length - 1);
+  const lo = Math.floor(idx);
+  const hi = Math.min(lo + 1, colors.length - 1);
+  const f = idx - lo;
+  const r = Math.round(colors[lo][0] + f * (colors[hi][0] - colors[lo][0]));
+  const g = Math.round(colors[lo][1] + f * (colors[hi][1] - colors[lo][1]));
+  const b = Math.round(colors[lo][2] + f * (colors[hi][2] - colors[lo][2]));
+  return `rgb(${r},${g},${b})`;
+}
+
+function updateMap() {
+  const gl = getGeo();
+  const mdef = getMetricDef();
+  if (!mdef) return;
+
+  const panel = getFilteredPanel();
+  const geo = gl === "Municipality" ? munGeo : stateGeo;
+  const idProp = gl === "Municipality" ? "code_muni_1872" : "code_state_chr";
+
+  const values = [];
+  for (const f of geo.features) {
+    const r = panel.get(f.properties[idProp]);
+    const v = r ? r[mdef.col] : null;
+    values.push(v);
+  }
+  const scale = getColorScale(values);
+
+  if (geoLayer) map.removeLayer(geoLayer);
+  if (legend) map.removeControl(legend);
+
+  geoLayer = L.geoJSON(geo, {
+    style: function(feature) {
+      const r = panel.get(feature.properties[idProp]);
+      const v = r ? r[mdef.col] : null;
+      let fillColor = "#eeeeee";
+      if (v != null && !isNaN(v) && scale.max > scale.min) {
+        fillColor = interpolateYlGnBu((v - scale.min) / (scale.max - scale.min));
+      } else if (v != null && !isNaN(v)) {
+        fillColor = interpolateYlGnBu(0.5);
+      }
+      return { fillColor, fillOpacity: 0.75, color: "#444", weight: 0.35, opacity: 0.9 };
+    },
+    onEachFeature: function(feature, layer) {
+      const r = panel.get(feature.properties[idProp]);
+      if (!r) return;
+      const v = r[mdef.col];
+      const num = r[mdef.numCol];
+      const den = r[mdef.denCol];
+      const html = `<b>${r.gn}</b><br>` +
+        `<b>${r.gt}:</b> ${r.glab}<br>` +
+        `<b>${mdef.label}:</b> ${fmtPct(v)}<br>` +
+        `<b>${mdef.numLabel}:</b> ${fmtNum(num)}<br>` +
+        `<b>${mdef.denLabel}:</b> ${fmtNum(den)}`;
+      layer.bindTooltip(html);
+      layer.bindPopup(html);
+      layer.on("mouseover", function() { this.setStyle({ weight: 2, color: "#222", fillOpacity: 0.9 }); this.bringToFront(); });
+      layer.on("mouseout", function() { geoLayer.resetStyle(this); });
+    }
+  }).addTo(map);
+
+  legend = L.control({ position: "bottomright" });
+  legend.onAdd = function() {
+    const div = L.DomUtil.create("div", "info legend");
+    div.style.background = "white";
+    div.style.padding = "8px";
+    div.style.borderRadius = "4px";
+    div.style.boxShadow = "0 0 4px rgba(0,0,0,0.3)";
+    div.style.fontSize = "12px";
+    div.style.lineHeight = "18px";
+    const steps = 6;
+    let html = `<b>${mdef.label}</b><br>`;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const v = scale.min + t * (scale.max - scale.min);
+      const color = interpolateYlGnBu(t);
+      html += `<i style="background:${color};width:18px;height:12px;display:inline-block;margin-right:4px;"></i>`;
+      if (i === 0 || i === steps) html += fmtPct(v);
+      html += "<br>";
+    }
+    div.innerHTML = html;
+    return div;
+  };
+  legend.addTo(map);
+
+  updateTable(panel, mdef);
+}
+
+function updateTable(panel, mdef) {
+  const rows = [...panel.values()]
+    .filter(r => r[mdef.col] != null && !isNaN(r[mdef.col]))
+    .sort((a, b) => b[mdef.col] - a[mdef.col])
+    .slice(0, 15);
+
+  const table = document.getElementById("top-table");
+  let html = `<thead><tr><th>Geography</th><th>Metric</th><th>${mdef.numLabel}</th><th>${mdef.denLabel}</th></tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr><td>${r.gn}</td><td>${fmtPct(r[mdef.col])}</td><td>${fmtNum(r[mdef.numCol])}</td><td>${fmtNum(r[mdef.denCol])}</td></tr>`;
+  }
+  html += "</tbody>";
+  table.innerHTML = html;
+}
+
+async function init() {
+  map = L.map("map").setView([-14, -52], 4);
+
+  const [panelRes, munRes, stateRes] = await Promise.all([
+    fetch("data/panel.json").then(r => r.json()),
+    fetch("data/mun.geojson").then(r => r.json()),
+    fetch("data/state.geojson").then(r => r.json())
+  ]);
+
+  panelData = panelRes;
+  panelRows = columnarToRows(panelData);
+  munGeo = munRes;
+  stateGeo = stateRes;
+
+  document.getElementById("loading").remove();
+
+  populateMetrics();
+  populateGroups();
+
+  document.querySelectorAll('input[name="geo"]').forEach(el => el.addEventListener("change", () => { populateGroups(); updateMap(); }));
+  document.querySelectorAll('input[name="groupType"]').forEach(el => el.addEventListener("change", () => { populateGroups(); updateMap(); }));
+  document.getElementById("group-select").addEventListener("change", updateMap);
+  document.getElementById("metric-select").addEventListener("change", updateMap);
+
+  updateMap();
+}
+
+init();
+</script>
+</body>
+</html>
