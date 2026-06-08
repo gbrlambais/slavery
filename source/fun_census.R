@@ -175,6 +175,8 @@ agriculture_patterns <- c(
 # Denominators and contextual literacy rates
 # ============================================================
 
+working_occ_patterns <- setdiff(broad_occ_patterns, "semprofissao")
+
 add_denominators <- function(.data) {
   .data %>%
     mutate(
@@ -186,17 +188,17 @@ add_denominators <- function(.data) {
       literacy_rate_population = safe_div(pop_literate, pop_total),
       enslaved_rate_population = safe_div(pop_enslaved, pop_total),
 
-      occ_total = sum_match(., prefix_total, broad_occ_patterns),
-      occ_free = sum_match(., prefix_free, broad_occ_patterns),
-      occ_enslaved = sum_match(., prefix_slave, broad_occ_patterns),
+      occ_total = sum_match(., prefix_total, working_occ_patterns),
+      occ_free = sum_match(., prefix_free, working_occ_patterns),
+      occ_enslaved = sum_match(., prefix_slave, working_occ_patterns),
 
       occ_male =
-        sum_match(., prefix_male_free, broad_occ_patterns) +
-        sum_match(., prefix_male_slave, broad_occ_patterns),
+        sum_match(., prefix_male_free, working_occ_patterns) +
+        sum_match(., prefix_male_slave, working_occ_patterns),
 
       occ_female =
-        sum_match(., prefix_female_free, broad_occ_patterns) +
-        sum_match(., prefix_female_slave, broad_occ_patterns)
+        sum_match(., prefix_female_free, working_occ_patterns) +
+        sum_match(., prefix_female_slave, working_occ_patterns)
     )
 }
 

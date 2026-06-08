@@ -24,24 +24,53 @@ mun_sf_1872 <- geobr::read_municipality(
   simplified = TRUE,
   showProgress = FALSE
 ) %>%
+  st_transform("EPSG:4326") %>%
   mutate(
     code_muni_1872 = as.character(code_muni),
     code_state = as.integer(code_state)
   )
+
+state_name_code_1872 <- tribble(
+  ~name_state,           ~code_state, ~abbrev_state,
+  "Amazonas",            13L, "AM",
+  "Pará",                15L, "PA",
+  "Maranhão",            21L, "MA",
+  "Piauhy",              22L, "PI",
+  "Ceará",               23L, "CE",
+  "Rio Grande do Norte", 24L, "RN",
+  "Parahyba",            25L, "PB",
+  "Pernambuco",          26L, "PE",
+  "Alagôas",             27L, "AL",
+  "Sergipe",             28L, "SE",
+  "Bahia",               29L, "BA",
+  "Município neutro",    30L, "MN",
+  "Minas Geraes",        31L, "MG",
+  "Espirito Santo",      32L, "ES",
+  "Rio de Janeiro",      33L, "RJ",
+  "São Paulo",           35L, "SP",
+  "Paraná",              41L, "PR",
+  "Santa Catharina",     42L, "SC",
+  "Rio Grande do Sul",   43L, "RS",
+  "Matto Grosso",        51L, "MT",
+  "Goyaz",               52L, "GO"
+)
 
 state_sf_1872 <- geobr::read_state(
   year = 1872,
   simplified = TRUE,
   showProgress = FALSE
 ) %>%
-  mutate(
-    code_state = as.integer(code_state),
-    code_state_chr = as.character(code_state)
-  )
+  st_transform("EPSG:4326") %>%
+  left_join(state_name_code_1872, by = "name_state") %>%
+  mutate(code_state_chr = as.character(code_state))
 
 # ============================================================
 # 3. Join census to geography
 # ============================================================
+
+state_name_lookup <- state_sf_1872 %>%
+  st_drop_geometry() %>%
+  select(code_state, name_state)
 
 mun_lookup_1872 <- mun_sf_1872 %>%
   st_drop_geometry() %>%
@@ -49,9 +78,9 @@ mun_lookup_1872 <- mun_sf_1872 %>%
     code_muni_1872,
     name_muni_map = name_muni,
     code_state,
-    abbrev_state,
-    name_state
-  )
+    abbrev_state
+  ) %>%
+  left_join(state_name_lookup, by = "code_state")
 
 df_mun_geo <- df_censo1872 %>%
   mutate(code_muni_1872 = as.character(muni_malha_id)) %>%
