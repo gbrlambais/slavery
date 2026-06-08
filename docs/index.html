@@ -3,73 +3,177 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Brazil 1872 Census: Occupations and Sectors</title>
+<title>Brazil Census Dashboard</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; display: flex; height: 100vh; }
 #sidebar {
-  width: 300px; min-width: 300px; padding: 20px; background: #f8f8f8;
+  width: 320px; min-width: 320px; padding: 20px; background: #f8f8f8;
   border-right: 1px solid #ddd; overflow-y: auto;
 }
 #sidebar h1 { font-size: 16px; margin-bottom: 16px; line-height: 1.3; }
-#sidebar label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 13px; }
-#sidebar select, #sidebar .radio-group { width: 100%; }
-#sidebar select { padding: 6px 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
-.radio-group label { display: inline-block; font-weight: normal; margin-right: 12px; cursor: pointer; }
+.section-label { display: block; font-weight: 600; margin: 12px 0 4px; font-size: 13px; }
+#sidebar select { width: 100%; padding: 6px 8px; font-size: 13px; border: 1px solid #ccc; border-radius: 4px; }
+.radio-group { margin-bottom: 4px; }
+.radio-group label { display: inline-block; font-weight: normal; margin-right: 12px; cursor: pointer; font-size: 13px; }
 .radio-group input { margin-right: 3px; }
-.note { font-size: 11px; color: #666; margin-top: 16px; line-height: 1.4; }
-#main { flex: 1; display: flex; flex-direction: column; }
-#map { flex: 1; }
-#table-container { height: 280px; overflow-y: auto; border-top: 1px solid #ddd; padding: 12px; }
+.note { font-size: 11px; color: #666; margin-top: 12px; line-height: 1.4; }
+.ctrl { display: none; }
+.ctrl.active { display: block; }
+
+#main { flex: 1; display: flex; flex-direction: column; position: relative; }
+#loading {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-size: 16px; color: #666; z-index: 1000; background: rgba(255,255,255,0.9);
+  padding: 16px 32px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  display: none;
+}
+
+#map-view { flex: 1; display: flex; flex-direction: column; }
+#map { flex: 1; min-height: 400px; }
+#table-container {
+  height: 260px; overflow-y: auto; border-top: 1px solid #ddd; padding: 12px;
+}
 #table-container h3 { font-size: 14px; margin-bottom: 8px; }
-#top-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-#top-table th, #top-table td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
-#top-table th { background: #f0f0f0; font-weight: 600; }
-#loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 18px; color: #666; z-index: 1000; }
+.dtable { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dtable th, .dtable td { padding: 4px 8px; text-align: left; border-bottom: 1px solid #eee; }
+.dtable th { background: #f0f0f0; font-weight: 600; }
+
+#reg-view { flex: 1; display: none; flex-direction: column; }
+.tabs { display: flex; border-bottom: 2px solid #ddd; padding: 0 8px; background: #fafafa; flex-shrink: 0; }
+.tab-btn {
+  padding: 10px 14px; border: none; background: none; cursor: pointer;
+  font-size: 13px; color: #666; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; white-space: nowrap;
+}
+.tab-btn.active { color: #333; border-bottom-color: #2196F3; font-weight: 600; }
+.tab-pane { flex: 1; display: none; overflow: auto; flex-direction: column; }
+.tab-pane.active { display: flex; }
+#reg-map { flex: 1; min-height: 500px; }
+.plot-container { flex: 1; padding: 16px; text-align: center; }
+.plot-container img { max-width: 100%; height: auto; border: 1px solid #eee; border-radius: 4px; }
+.help-text { font-size: 11px; color: #888; padding: 8px 16px; }
 </style>
 </head>
 <body>
 
 <div id="sidebar">
-  <h1>Brazil 1872 Census: Occupations and Sectors</h1>
+  <h1 id="app-title">Brazil 1872 Census: occupations and sectors</h1>
 
-  <label>Geographic level</label>
+  <label class="section-label">View</label>
   <div class="radio-group">
-    <label><input type="radio" name="geo" value="Municipality" checked> Municipality</label>
-    <label><input type="radio" name="geo" value="State"> State</label>
+    <label><input type="radio" name="mode" value="1872" checked> 1872 Census</label><br>
+    <label><input type="radio" name="mode" value="1920"> 1920 Census</label><br>
+    <label><input type="radio" name="mode" value="transformation"> 1872-1920 Transformation</label><br>
+    <label><input type="radio" name="mode" value="regression"> Regression</label>
   </div>
 
-  <label>Analysis type</label>
-  <div class="radio-group">
-    <label><input type="radio" name="groupType" value="Occupation"> Occupation</label>
-    <label><input type="radio" name="groupType" value="Sector" checked> Sector</label>
+  <div id="ctrl-1872" class="ctrl active">
+    <label class="section-label">Geographic level</label>
+    <div class="radio-group">
+      <label><input type="radio" name="geo1872" value="Municipality" checked> Municipality</label>
+      <label><input type="radio" name="geo1872" value="State"> State</label>
+    </div>
+    <label class="section-label">Analysis type</label>
+    <div class="radio-group">
+      <label><input type="radio" name="groupType" value="Occupation"> Occupation</label>
+      <label><input type="radio" name="groupType" value="Sector" checked> Sector</label>
+    </div>
+    <label class="section-label" id="group-label-1872">Sector</label>
+    <select id="group-sel-1872"></select>
+    <label class="section-label">Map metric</label>
+    <select id="metric-sel-1872"></select>
+    <p class="note">Note: literacy and enslaved population rates are mapped as population-level contextual rates because the census variables do not cross-tab these by occupation or sector.</p>
   </div>
 
-  <label id="group-label">Sector</label>
-  <select id="group-select"></select>
+  <div id="ctrl-1920" class="ctrl">
+    <label class="section-label">Geographic level</label>
+    <div class="radio-group">
+      <label><input type="radio" name="geo1920" value="Municipality" checked> Municipality</label>
+      <label><input type="radio" name="geo1920" value="State"> State</label>
+    </div>
+    <label class="section-label">Sector</label>
+    <select id="group-sel-1920"></select>
+    <label class="section-label">Map metric</label>
+    <select id="metric-sel-1920"></select>
+  </div>
 
-  <label>Map metric</label>
-  <select id="metric-select"></select>
+  <div id="ctrl-transformation" class="ctrl">
+    <label class="section-label">Geographic level</label>
+    <div class="radio-group">
+      <label><input type="radio" name="geoTrans" value="AMC" checked> AMC</label>
+      <label><input type="radio" name="geoTrans" value="State"> State</label>
+    </div>
+    <label class="section-label">Map metric</label>
+    <select id="metric-sel-trans"></select>
+    <p class="note">Sectors harmonized to 3 broad categories (agriculture, manufacturing, services) across both censuses. AMC = Minimum Comparable Areas (crosswalk for boundary changes). State aggregation needs no crosswalk.</p>
+  </div>
 
-  <p class="note">
-    Note: literacy and enslaved population rates are mapped as population-level
-    contextual rates because the census variables do not cross-tab these by
-    occupation or sector.
-  </p>
+  <div id="ctrl-regression" class="ctrl">
+    <label class="section-label">Outcome metric (Y)</label>
+    <select id="reg-y-sel"></select>
+    <p class="note">X = enslaved share 1872. All regressions use AMC-level data. Variables are standardized (z-scored). State regressions use within-state standardization; national regressions use global standardization.</p>
+  </div>
 </div>
 
 <div id="main">
-  <div id="map"><div id="loading">Loading data...</div></div>
-  <div id="table-container">
-    <h3>Top geographies for selected metric</h3>
-    <table id="top-table"><tbody></tbody></table>
+  <div id="loading">Loading data...</div>
+
+  <div id="map-view">
+    <div id="map"></div>
+    <div id="table-container">
+      <h3 id="table-title">Top geographies for selected metric</h3>
+      <table class="dtable" id="top-table"><tbody></tbody></table>
+    </div>
+  </div>
+
+  <div id="reg-view">
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="coef-map">Coefficient Map</button>
+      <button class="tab-btn" data-tab="state-reg">State Regressions</button>
+      <button class="tab-btn" data-tab="national-reg">National Regressions</button>
+      <button class="tab-btn" data-tab="scatter">Scatter</button>
+      <button class="tab-btn" data-tab="quartile">Quartile Comparison</button>
+    </div>
+    <div class="tab-pane active" id="pane-coef-map">
+      <div id="reg-map"></div>
+    </div>
+    <div class="tab-pane" id="pane-state-reg">
+      <div class="plot-container"><img id="img-state-reg"></div>
+      <p class="help-text">Within-state standardized regressions at AMC level. Error bars = 95% CI. States with &lt; 5 AMCs excluded.</p>
+    </div>
+    <div class="tab-pane" id="pane-national-reg">
+      <div class="plot-container">
+        <img id="img-national-pooled" src="plots/national_pooled.png">
+        <br>
+        <img id="img-national-fe" src="plots/national_fe.png">
+      </div>
+      <p class="help-text">Pooled regressions across all AMCs. Variables standardized globally. Error bars = 95% CI.</p>
+    </div>
+    <div class="tab-pane" id="pane-scatter">
+      <div class="plot-container"><img id="img-scatter"></div>
+    </div>
+    <div class="tab-pane" id="pane-quartile">
+      <div class="plot-container"><img src="plots/quartile.png"></div>
+    </div>
   </div>
 </div>
 
 <script>
-const METRICS = [
+// ============================================================
+// Constants
+// ============================================================
+
+const TITLES = {
+  '1872': 'Brazil 1872 Census: occupations and sectors',
+  '1920': 'Brazil 1920 Census: sectoral employment',
+  'transformation': 'Brazil 1872-1920: structural transformation',
+  'regression': 'Brazil 1872-1920: slavery and structural change regressions'
+};
+
+const METRICS_1872 = [
   { label: "Share of occupations", col: "share_of_all_occupations", numCol: "n_total", denCol: "occ_total", numLabel: "Total in group", denLabel: "Total occupations" },
   { label: "Free share within group", col: "share_free_within_group", numCol: "n_free", denCol: "n_total", numLabel: "Free in group", denLabel: "Total in group" },
   { label: "Enslaved share within group", col: "share_enslaved_within_group", numCol: "n_enslaved", denCol: "n_total", numLabel: "Enslaved in group", denLabel: "Total in group" },
@@ -77,25 +181,89 @@ const METRICS = [
   { label: "Female share within group", col: "share_female_within_group", numCol: "n_female", denCol: "n_total", numLabel: "Female in group", denLabel: "Total in group" },
   { label: "Population literacy rate", col: "literacy_rate_population", numCol: "pop_literate", denCol: "pop_total", numLabel: "Literate population", denLabel: "Total population" },
   { label: "Enslaved population rate", col: "enslaved_rate_population", numCol: "pop_enslaved", denCol: "pop_total", numLabel: "Enslaved population", denLabel: "Total population" },
-  { label: "Share of national occupations", col: "share_of_national_occupations", numCol: "n_total", denCol: "n_total_national", numLabel: "Total in group", denLabel: "National total in group" },
-  { label: "Free share of national group", col: "share_free_of_national_group", numCol: "n_free", denCol: "n_free_national", numLabel: "Free in group", denLabel: "National free in group" },
-  { label: "Enslaved share of national group", col: "share_enslaved_of_national_group", numCol: "n_enslaved", denCol: "n_enslaved_national", numLabel: "Enslaved in group", denLabel: "National enslaved in group" },
-  { label: "Male share of national group", col: "share_male_of_national_group", numCol: "n_male", denCol: "n_male_national", numLabel: "Male in group", denLabel: "National male in group" },
-  { label: "Female share of national group", col: "share_female_of_national_group", numCol: "n_female", denCol: "n_female_national", numLabel: "Female in group", denLabel: "National female in group" },
-  { label: "Literacy rate of national population", col: "literacy_rate_of_national_pop", numCol: "pop_literate", denCol: "pop_literate_national", numLabel: "Literate population", denLabel: "National literate population" },
-  { label: "Enslaved rate of national population", col: "enslaved_rate_of_national_pop", numCol: "pop_enslaved", denCol: "pop_enslaved_national", numLabel: "Enslaved population", denLabel: "National enslaved population" }
+  { label: "Share of national occupations", col: "share_of_national_occupations", numCol: "n_total", denCol: "n_total_national", numLabel: "Total in group", denLabel: "National total" },
+  { label: "Free share of national group", col: "share_free_of_national_group", numCol: "n_free", denCol: "n_free_national", numLabel: "Free in group", denLabel: "National free" },
+  { label: "Enslaved share of national group", col: "share_enslaved_of_national_group", numCol: "n_enslaved", denCol: "n_enslaved_national", numLabel: "Enslaved in group", denLabel: "National enslaved" },
+  { label: "Male share of national group", col: "share_male_of_national_group", numCol: "n_male", denCol: "n_male_national", numLabel: "Male in group", denLabel: "National male" },
+  { label: "Female share of national group", col: "share_female_of_national_group", numCol: "n_female", denCol: "n_female_national", numLabel: "Female in group", denLabel: "National female" },
+  { label: "Literacy rate of national pop", col: "literacy_rate_of_national_pop", numCol: "pop_literate", denCol: "pop_literate_national", numLabel: "Literate pop", denLabel: "National literate" },
+  { label: "Enslaved rate of national pop", col: "enslaved_rate_of_national_pop", numCol: "pop_enslaved", denCol: "pop_enslaved_national", numLabel: "Enslaved pop", denLabel: "National enslaved" }
 ];
 
-let panelData, munGeo, stateGeo, map, geoLayer, legend;
-let panelRows = [];
+const METRICS_1920 = [
+  { label: "Share of occupations", col: "share_of_all_occupations", numCol: "n_total", denCol: "occ_total", numLabel: "Total in group", denLabel: "Total occupations" },
+  { label: "Male share within group", col: "share_male_within_group", numCol: "n_male", denCol: "n_total", numLabel: "Male in group", denLabel: "Total in group" },
+  { label: "Female share within group", col: "share_female_within_group", numCol: "n_female", denCol: "n_total", numLabel: "Female in group", denLabel: "Total in group" },
+  { label: "Population literacy rate", col: "literacy_rate_population", numCol: "pop_literate", denCol: "pop_total", numLabel: "Literate population", denLabel: "Total population" },
+  { label: "Share of national occupations", col: "share_of_national_occupations", numCol: "n_total", denCol: "n_total_national", numLabel: "Total in group", denLabel: "National total" },
+  { label: "Male share of national group", col: "share_male_of_national_group", numCol: "n_male", denCol: "n_male_national", numLabel: "Male in group", denLabel: "National male" },
+  { label: "Female share of national group", col: "share_female_of_national_group", numCol: "n_female", denCol: "n_female_national", numLabel: "Female in group", denLabel: "National female" },
+  { label: "Literacy rate of national pop", col: "literacy_rate_of_national_pop", numCol: "pop_literate", denCol: "pop_literate_national", numLabel: "Literate pop", denLabel: "National literate" }
+];
+
+const METRICS_TRANS = [
+  { label: "Mfg share 1920 (level)", col: "mfg_share_1920", isPct: true, div: false },
+  { label: "Agr share 1920 (level)", col: "agr_share_1920", isPct: true, div: false },
+  { label: "Non-agr share 1920 (level)", col: "non_agr_share_1920", isPct: true, div: false },
+  { label: "Mfg/agr ratio 1920", col: "mfg_agr_ratio_1920", isPct: false, div: false },
+  { label: "Literacy rate 1920", col: "literacy_rate_1920", isPct: true, div: false },
+  { label: "Mfg per capita 1920", col: "mfg_percapita_1920", isPct: false, div: false },
+  { label: "Mfg share change (pp)", col: "mfg_share_change_pp", isPct: true, div: true },
+  { label: "Mfg share log ratio", col: "mfg_share_log_ratio", isPct: false, div: true },
+  { label: "Mfg share CAGR", col: "mfg_share_cagr", isPct: false, div: true },
+  { label: "Mfg share logit change", col: "mfg_share_logit_change", isPct: false, div: true },
+  { label: "Non-agr share change (pp)", col: "non_agr_share_change_pp", isPct: true, div: true },
+  { label: "Mfg/agr ratio change", col: "mfg_agr_ratio_change", isPct: false, div: true },
+  { label: "Structural change index", col: "structural_change_index", isPct: false, div: false },
+  { label: "Agr exit share", col: "agr_exit_share", isPct: true, div: true },
+  { label: "Services share change (pp)", col: "serv_share_change_pp", isPct: true, div: true },
+  { label: "Literacy rate change (pp)", col: "literacy_rate_change_pp", isPct: true, div: true },
+  { label: "Pop growth rate (annual)", col: "pop_growth_rate", isPct: false, div: false },
+  { label: "Enslaved share 1872 (X)", col: "enslaved_share_1872", isPct: true, div: false },
+  { label: "Enslaved mfg share 1872", col: "enslaved_mfg_share_1872", isPct: true, div: false },
+  { label: "Enslaved agr share 1872", col: "enslaved_agr_share_1872", isPct: true, div: false },
+  { label: "Mfg share 1872 (baseline)", col: "mfg_share_1872", isPct: true, div: false },
+  { label: "Literacy rate 1872 (baseline)", col: "literacy_rate_1872", isPct: true, div: false }
+];
+
+const REG_Y = [
+  { value: "mfg_share_change_pp", label: "Mfg share change (pp)" },
+  { value: "mfg_share_log_ratio", label: "Mfg share log ratio" },
+  { value: "mfg_share_cagr", label: "Mfg share CAGR" },
+  { value: "mfg_share_logit_change", label: "Mfg share logit change" },
+  { value: "non_agr_share_change_pp", label: "Non-agr share change (pp)" },
+  { value: "mfg_agr_ratio_change", label: "Mfg/agr ratio change" },
+  { value: "structural_change_index", label: "Structural change index" },
+  { value: "agr_exit_share", label: "Agr exit share" },
+  { value: "serv_share_change_pp", label: "Services share change (pp)" },
+  { value: "literacy_rate_change_pp", label: "Literacy rate change (pp)" },
+  { value: "pop_growth_rate", label: "Pop growth rate" }
+];
+
+// ============================================================
+// State & Cache
+// ============================================================
+
+const cache = {};
+let mainMap, regMap;
+
+// ============================================================
+// Utilities
+// ============================================================
 
 function fmtPct(v) { return v == null || isNaN(v) ? "No data" : (v * 100).toFixed(1) + "%"; }
 function fmtNum(v) { return v == null || isNaN(v) ? "No data" : Math.round(v).toLocaleString(); }
+function fmtVal(v, isPct) { return isPct ? fmtPct(v) : (v == null || isNaN(v) ? "No data" : v.toFixed(4)); }
+
+function getRadio(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : null;
+}
 
 function columnarToRows(col) {
-  const n = col.gl.length;
-  const rows = new Array(n);
   const keys = Object.keys(col);
+  const n = col[keys[0]].length;
+  const rows = new Array(n);
   for (let i = 0; i < n; i++) {
     const r = {};
     for (const k of keys) r[k] = col[k][i];
@@ -104,197 +272,414 @@ function columnarToRows(col) {
   return rows;
 }
 
-function getGeo() { return document.querySelector('input[name="geo"]:checked').value; }
-function getGroupType() { return document.querySelector('input[name="groupType"]:checked').value; }
-function getGroupId() { return document.getElementById("group-select").value; }
-function getMetricCol() { return document.getElementById("metric-select").value; }
-function getMetricDef() { return METRICS.find(m => m.col === getMetricCol()); }
-
-function populateMetrics() {
-  const sel = document.getElementById("metric-select");
-  sel.innerHTML = "";
-  for (const m of METRICS) {
-    const opt = document.createElement("option");
-    opt.value = m.col;
-    opt.textContent = m.label;
+function populateSelect(sel, options) {
+  sel.innerHTML = '';
+  for (const o of options) {
+    const opt = document.createElement('option');
+    opt.value = o.value;
+    opt.textContent = o.label;
     sel.appendChild(opt);
   }
 }
 
-function populateGroups() {
-  const gt = getGroupType();
-  const gl = getGeo();
-  document.getElementById("group-label").textContent = gt;
-  const seen = new Map();
-  for (const r of panelRows) {
-    if (r.gt === gt && r.gl === gl && !seen.has(r.grid)) {
-      seen.set(r.grid, r.glab);
-    }
-  }
-  const sorted = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  const sel = document.getElementById("group-select");
-  sel.innerHTML = "";
-  for (const [id, label] of sorted) {
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = label;
-    sel.appendChild(opt);
-  }
-}
-
-function getFilteredPanel() {
-  const gl = getGeo();
-  const gt = getGroupType();
-  const grid = getGroupId();
-  const lookup = new Map();
-  for (const r of panelRows) {
-    if (r.gl === gl && r.gt === gt && r.grid === grid) {
-      lookup.set(r.gid, r);
-    }
-  }
-  return lookup;
-}
-
-function getColorScale(values) {
-  const valid = values.filter(v => v != null && !isNaN(v));
-  if (valid.length === 0) return { min: 0, max: 1 };
-  return { min: Math.min(...valid), max: Math.max(...valid) };
-}
-
-function interpolateYlGnBu(t) {
-  const colors = [
-    [255, 255, 217], [237, 248, 177], [199, 233, 180],
-    [127, 205, 187], [65, 182, 196], [29, 145, 192],
-    [34, 94, 168], [37, 52, 148], [8, 29, 88]
-  ];
+function interpYlGnBu(t) {
+  const c = [[255,255,217],[237,248,177],[199,233,180],[127,205,187],[65,182,196],[29,145,192],[34,94,168],[37,52,148],[8,29,88]];
   t = Math.max(0, Math.min(1, t));
-  const idx = t * (colors.length - 1);
-  const lo = Math.floor(idx);
-  const hi = Math.min(lo + 1, colors.length - 1);
-  const f = idx - lo;
-  const r = Math.round(colors[lo][0] + f * (colors[hi][0] - colors[lo][0]));
-  const g = Math.round(colors[lo][1] + f * (colors[hi][1] - colors[lo][1]));
-  const b = Math.round(colors[lo][2] + f * (colors[hi][2] - colors[lo][2]));
-  return `rgb(${r},${g},${b})`;
+  const idx = t * (c.length - 1), lo = Math.floor(idx), hi = Math.min(lo + 1, c.length - 1), f = idx - lo;
+  return `rgb(${Math.round(c[lo][0]+f*(c[hi][0]-c[lo][0]))},${Math.round(c[lo][1]+f*(c[hi][1]-c[lo][1]))},${Math.round(c[lo][2]+f*(c[hi][2]-c[lo][2]))})`;
 }
 
-function updateMap() {
-  const gl = getGeo();
-  const mdef = getMetricDef();
-  if (!mdef) return;
+function interpRdBu(t) {
+  const c = [[33,102,172],[103,169,207],[209,229,240],[247,247,247],[253,219,199],[239,138,98],[178,24,43]];
+  t = Math.max(0, Math.min(1, t));
+  const idx = t * (c.length - 1), lo = Math.floor(idx), hi = Math.min(lo + 1, c.length - 1), f = idx - lo;
+  return `rgb(${Math.round(c[lo][0]+f*(c[hi][0]-c[lo][0]))},${Math.round(c[lo][1]+f*(c[hi][1]-c[lo][1]))},${Math.round(c[lo][2]+f*(c[hi][2]-c[lo][2]))})`;
+}
 
-  const panel = getFilteredPanel();
-  const geo = gl === "Municipality" ? munGeo : stateGeo;
-  const idProp = gl === "Municipality" ? "code_muni_1872" : "code_state_chr";
+async function fetchJson(url) {
+  if (!cache[url]) cache[url] = await fetch(url).then(r => r.json());
+  return cache[url];
+}
 
+function showLoading(msg) {
+  const el = document.getElementById('loading');
+  el.textContent = msg || 'Loading data...';
+  el.style.display = 'block';
+}
+function hideLoading() { document.getElementById('loading').style.display = 'none'; }
+
+// ============================================================
+// Generic Choropleth
+// ============================================================
+
+function renderChoropleth(mapObj, geo, idProp, lookup, valCol, opts) {
   const values = [];
   for (const f of geo.features) {
-    const r = panel.get(f.properties[idProp]);
-    const v = r ? r[mdef.col] : null;
-    values.push(v);
+    const r = lookup.get(String(f.properties[idProp]));
+    values.push(r ? r[valCol] : null);
   }
-  const scale = getColorScale(values);
+  const valid = values.filter(v => v != null && !isNaN(v));
+  if (valid.length === 0) return;
 
-  if (geoLayer) map.removeLayer(geoLayer);
-  if (legend) map.removeControl(legend);
+  let colorFn;
+  if (opts.diverging) {
+    const maxAbs = Math.max(...valid.map(Math.abs), 0.001);
+    colorFn = v => (v == null || isNaN(v)) ? '#eeeeee' : interpRdBu((v + maxAbs) / (2 * maxAbs));
+  } else {
+    const mn = Math.min(...valid), mx = Math.max(...valid), rng = mx - mn || 1;
+    colorFn = v => (v == null || isNaN(v)) ? '#eeeeee' : interpYlGnBu((v - mn) / rng);
+  }
 
-  geoLayer = L.geoJSON(geo, {
-    style: function(feature) {
-      const r = panel.get(feature.properties[idProp]);
-      const v = r ? r[mdef.col] : null;
-      let fillColor = "#eeeeee";
-      if (v != null && !isNaN(v) && scale.max > scale.min) {
-        fillColor = interpolateYlGnBu((v - scale.min) / (scale.max - scale.min));
-      } else if (v != null && !isNaN(v)) {
-        fillColor = interpolateYlGnBu(0.5);
-      }
-      return { fillColor, fillOpacity: 0.75, color: "#444", weight: 0.35, opacity: 0.9 };
+  if (mapObj._gl) mapObj.removeLayer(mapObj._gl);
+  if (mapObj._lg) mapObj.removeControl(mapObj._lg);
+
+  mapObj._gl = L.geoJSON(geo, {
+    style: f => {
+      const r = lookup.get(String(f.properties[idProp]));
+      return { fillColor: colorFn(r ? r[valCol] : null), fillOpacity: 0.75, color: '#444', weight: 0.35, opacity: 0.9 };
     },
-    onEachFeature: function(feature, layer) {
-      const r = panel.get(feature.properties[idProp]);
+    onEachFeature: (f, layer) => {
+      const r = lookup.get(String(f.properties[idProp]));
       if (!r) return;
-      const v = r[mdef.col];
-      const num = r[mdef.numCol];
-      const den = r[mdef.denCol];
-      const html = `<b>${r.gn}</b><br>` +
-        `<b>${r.gt}:</b> ${r.glab}<br>` +
-        `<b>${mdef.label}:</b> ${fmtPct(v)}<br>` +
-        `<b>${mdef.numLabel}:</b> ${fmtNum(num)}<br>` +
-        `<b>${mdef.denLabel}:</b> ${fmtNum(den)}`;
+      const html = opts.tooltipFn(r);
       layer.bindTooltip(html);
       layer.bindPopup(html);
-      layer.on("mouseover", function() { this.setStyle({ weight: 2, color: "#222", fillOpacity: 0.9 }); this.bringToFront(); });
-      layer.on("mouseout", function() { geoLayer.resetStyle(this); });
+      layer.on('mouseover', function() { this.setStyle({ weight: 2, color: '#222', fillOpacity: 0.9 }); this.bringToFront(); });
+      layer.on('mouseout', function() { mapObj._gl.resetStyle(this); });
     }
-  }).addTo(map);
+  }).addTo(mapObj);
 
-  legend = L.control({ position: "bottomright" });
-  legend.onAdd = function() {
-    const div = L.DomUtil.create("div", "info legend");
-    div.style.background = "white";
-    div.style.padding = "8px";
-    div.style.borderRadius = "4px";
-    div.style.boxShadow = "0 0 4px rgba(0,0,0,0.3)";
-    div.style.fontSize = "12px";
-    div.style.lineHeight = "18px";
+  const lg = L.control({ position: 'bottomright' });
+  lg.onAdd = function() {
+    const div = L.DomUtil.create('div', 'info legend');
+    div.style.cssText = 'background:white;padding:8px;border-radius:4px;box-shadow:0 0 4px rgba(0,0,0,.3);font-size:12px;line-height:18px';
     const steps = 6;
-    let html = `<b>${mdef.label}</b><br>`;
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-      const v = scale.min + t * (scale.max - scale.min);
-      const color = interpolateYlGnBu(t);
-      html += `<i style="background:${color};width:18px;height:12px;display:inline-block;margin-right:4px;"></i>`;
-      if (i === 0 || i === steps) html += fmtPct(v);
-      html += "<br>";
+    let html = `<b>${opts.label}</b><br>`;
+    if (opts.diverging) {
+      const maxAbs = Math.max(...valid.map(Math.abs), 0.001);
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, v = -maxAbs + t * 2 * maxAbs;
+        html += `<i style="background:${interpRdBu(t)};width:18px;height:12px;display:inline-block;margin-right:4px"></i>`;
+        if (i === 0 || i === steps) html += fmtVal(v, opts.isPct);
+        html += '<br>';
+      }
+    } else {
+      const mn = Math.min(...valid), mx = Math.max(...valid);
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, v = mn + t * (mx - mn);
+        html += `<i style="background:${interpYlGnBu(t)};width:18px;height:12px;display:inline-block;margin-right:4px"></i>`;
+        if (i === 0 || i === steps) html += fmtVal(v, opts.isPct);
+        html += '<br>';
+      }
     }
     div.innerHTML = html;
     return div;
   };
-  legend.addTo(map);
-
-  updateTable(panel, mdef);
+  mapObj._lg = lg;
+  lg.addTo(mapObj);
 }
 
-function updateTable(panel, mdef) {
-  const rows = [...panel.values()]
-    .filter(r => r[mdef.col] != null && !isNaN(r[mdef.col]))
-    .sort((a, b) => b[mdef.col] - a[mdef.col])
-    .slice(0, 15);
+// ============================================================
+// 1872 Mode
+// ============================================================
 
-  const table = document.getElementById("top-table");
-  let html = `<thead><tr><th>Geography</th><th>Metric</th><th>${mdef.numLabel}</th><th>${mdef.denLabel}</th></tr></thead><tbody>`;
-  for (const r of rows) {
-    html += `<tr><td>${r.gn}</td><td>${fmtPct(r[mdef.col])}</td><td>${fmtNum(r[mdef.numCol])}</td><td>${fmtNum(r[mdef.denCol])}</td></tr>`;
+function populateGroups1872() {
+  const data = cache['data_1872'];
+  if (!data) return;
+  const gl = getRadio('geo1872'), gt = getRadio('groupType');
+  document.getElementById('group-label-1872').textContent = gt;
+  const seen = new Map();
+  for (const r of data.rows) {
+    if (r.gl === gl && r.gt === gt && !seen.has(r.grid)) seen.set(r.grid, r.glab);
   }
-  html += "</tbody>";
-  table.innerHTML = html;
+  const sorted = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  populateSelect(document.getElementById('group-sel-1872'), sorted.map(([v, l]) => ({ value: v, label: l })));
 }
+
+async function update1872() {
+  showLoading();
+  if (!cache['data_1872']) {
+    const [panel, mun, state] = await Promise.all([
+      fetchJson('data/panel_1872.json'), fetchJson('data/mun_1872.geojson'), fetchJson('data/state_1872.geojson')
+    ]);
+    cache['data_1872'] = { rows: columnarToRows(panel), munGeo: mun, stateGeo: state };
+    populateGroups1872();
+  }
+  hideLoading();
+
+  const data = cache['data_1872'];
+  const gl = getRadio('geo1872'), gt = getRadio('groupType');
+  const grid = document.getElementById('group-sel-1872').value;
+  const metricCol = document.getElementById('metric-sel-1872').value;
+  const mdef = METRICS_1872.find(m => m.col === metricCol);
+  if (!mdef || !grid) return;
+
+  const lookup = new Map();
+  for (const r of data.rows) {
+    if (r.gl === gl && r.gt === gt && r.grid === grid) lookup.set(r.gid, r);
+  }
+
+  const geo = gl === 'Municipality' ? data.munGeo : data.stateGeo;
+  const idProp = gl === 'Municipality' ? 'code_muni_1872' : 'code_state_chr';
+
+  renderChoropleth(mainMap, geo, idProp, lookup, mdef.col, {
+    label: mdef.label, isPct: true, diverging: false,
+    tooltipFn: r => `<b>${r.gn}</b><br><b>${r.gt}:</b> ${r.glab}<br><b>${mdef.label}:</b> ${fmtPct(r[mdef.col])}<br><b>${mdef.numLabel}:</b> ${fmtNum(r[mdef.numCol])}<br><b>${mdef.denLabel}:</b> ${fmtNum(r[mdef.denCol])}`
+  });
+
+  const rows = [...lookup.values()].filter(r => r[mdef.col] != null && !isNaN(r[mdef.col]))
+    .sort((a, b) => b[mdef.col] - a[mdef.col]).slice(0, 15);
+  let html = `<thead><tr><th>Geography</th><th>Metric</th><th>${mdef.numLabel}</th><th>${mdef.denLabel}</th></tr></thead><tbody>`;
+  for (const r of rows) html += `<tr><td>${r.gn}</td><td>${fmtPct(r[mdef.col])}</td><td>${fmtNum(r[mdef.numCol])}</td><td>${fmtNum(r[mdef.denCol])}</td></tr>`;
+  document.getElementById('top-table').innerHTML = html + '</tbody>';
+  document.getElementById('table-title').textContent = 'Top geographies for selected metric';
+}
+
+// ============================================================
+// 1920 Mode
+// ============================================================
+
+function populateGroups1920() {
+  const data = cache['data_1920'];
+  if (!data) return;
+  const gl = getRadio('geo1920');
+  const seen = new Map();
+  for (const r of data.rows) {
+    if (r.gl === gl && !seen.has(r.grid)) seen.set(r.grid, r.glab);
+  }
+  const sorted = [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  populateSelect(document.getElementById('group-sel-1920'), sorted.map(([v, l]) => ({ value: v, label: l })));
+}
+
+async function update1920() {
+  showLoading();
+  if (!cache['data_1920']) {
+    const [panel, mun, state] = await Promise.all([
+      fetchJson('data/panel_1920.json'), fetchJson('data/mun_1920.geojson'), fetchJson('data/state_1920.geojson')
+    ]);
+    cache['data_1920'] = { rows: columnarToRows(panel), munGeo: mun, stateGeo: state };
+    populateGroups1920();
+  }
+  hideLoading();
+
+  const data = cache['data_1920'];
+  const gl = getRadio('geo1920');
+  const grid = document.getElementById('group-sel-1920').value;
+  const metricCol = document.getElementById('metric-sel-1920').value;
+  const mdef = METRICS_1920.find(m => m.col === metricCol);
+  if (!mdef || !grid) return;
+
+  const lookup = new Map();
+  for (const r of data.rows) {
+    if (r.gl === gl && r.gt === 'Sector' && r.grid === grid) lookup.set(r.gid, r);
+  }
+
+  const geo = gl === 'Municipality' ? data.munGeo : data.stateGeo;
+  const idProp = gl === 'Municipality' ? 'code_muni_1920' : 'code_state_chr';
+
+  renderChoropleth(mainMap, geo, idProp, lookup, mdef.col, {
+    label: mdef.label, isPct: true, diverging: false,
+    tooltipFn: r => `<b>${r.gn}</b><br><b>Sector:</b> ${r.glab}<br><b>${mdef.label}:</b> ${fmtPct(r[mdef.col])}<br><b>${mdef.numLabel}:</b> ${fmtNum(r[mdef.numCol])}<br><b>${mdef.denLabel}:</b> ${fmtNum(r[mdef.denCol])}`
+  });
+
+  const rows = [...lookup.values()].filter(r => r[mdef.col] != null && !isNaN(r[mdef.col]))
+    .sort((a, b) => b[mdef.col] - a[mdef.col]).slice(0, 15);
+  let html = `<thead><tr><th>Geography</th><th>Metric</th><th>${mdef.numLabel}</th><th>${mdef.denLabel}</th></tr></thead><tbody>`;
+  for (const r of rows) html += `<tr><td>${r.gn}</td><td>${fmtPct(r[mdef.col])}</td><td>${fmtNum(r[mdef.numCol])}</td><td>${fmtNum(r[mdef.denCol])}</td></tr>`;
+  document.getElementById('top-table').innerHTML = html + '</tbody>';
+  document.getElementById('table-title').textContent = 'Top geographies for selected metric';
+}
+
+// ============================================================
+// Transformation Mode
+// ============================================================
+
+async function updateTransformation() {
+  showLoading();
+  if (!cache['data_trans']) {
+    const [amcPanel, statePanel, amcGeo, stateGeo] = await Promise.all([
+      fetchJson('data/transformation_amc.json'), fetchJson('data/transformation_state.json'),
+      fetchJson('data/amc.geojson'), fetchJson('data/state_1872.geojson')
+    ]);
+    cache['data_trans'] = {
+      amcRows: columnarToRows(amcPanel), stateRows: columnarToRows(statePanel),
+      amcGeo: amcGeo, stateGeo: stateGeo
+    };
+  }
+  hideLoading();
+
+  const data = cache['data_trans'];
+  const gl = getRadio('geoTrans');
+  const metricCol = document.getElementById('metric-sel-trans').value;
+  const mdef = METRICS_TRANS.find(m => m.col === metricCol);
+  if (!mdef) return;
+
+  const isState = gl === 'State';
+  const rows = isState ? data.stateRows : data.amcRows;
+  const geo = isState ? data.stateGeo : data.amcGeo;
+  const idProp = isState ? 'code_state_chr' : 'code_amc';
+  const idCol = isState ? 'state_code' : 'code_amc';
+
+  const lookup = new Map();
+  for (const r of rows) lookup.set(String(r[idCol]), r);
+
+  renderChoropleth(mainMap, geo, idProp, lookup, mdef.col, {
+    label: mdef.label, isPct: mdef.isPct, diverging: mdef.div,
+    tooltipFn: r => {
+      const name = isState ? r.state_name : `AMC ${r.code_amc}`;
+      return `<b>${name}</b><br><b>${mdef.label}:</b> ${fmtVal(r[mdef.col], mdef.isPct)}`;
+    }
+  });
+
+  const sorted = [...lookup.values()].filter(r => r[mdef.col] != null && !isNaN(r[mdef.col]))
+    .sort((a, b) => b[mdef.col] - a[mdef.col]).slice(0, 15);
+  const nameHeader = isState ? 'State' : 'AMC code';
+  let html = `<thead><tr><th>${nameHeader}</th><th>Metric</th></tr></thead><tbody>`;
+  for (const r of sorted) html += `<tr><td>${isState ? r.state_name : r.code_amc}</td><td>${fmtVal(r[mdef.col], mdef.isPct)}</td></tr>`;
+  document.getElementById('top-table').innerHTML = html + '</tbody>';
+  document.getElementById('table-title').textContent = `Top units for selected metric - ${gl} level`;
+}
+
+// ============================================================
+// Regression Mode
+// ============================================================
+
+async function loadRegressionData() {
+  if (cache['data_reg']) return;
+  showLoading();
+  const [regState, regNational, stateGeo] = await Promise.all([
+    fetchJson('data/regression_state.json'), fetchJson('data/regression_national.json'),
+    fetchJson('data/state_1872.geojson')
+  ]);
+  cache['data_reg'] = { stateResults: regState, nationalResults: regNational, stateGeo: stateGeo };
+  hideLoading();
+}
+
+function updateRegressionCoefMap() {
+  const data = cache['data_reg'];
+  if (!data) return;
+  const yMetric = document.getElementById('reg-y-sel').value;
+  const yLabel = REG_Y.find(r => r.value === yMetric)?.label || yMetric;
+
+  const filtered = data.stateResults.filter(d => d.y_metric === yMetric);
+  const lookup = new Map();
+  for (const d of filtered) lookup.set(d.state_code, d);
+
+  renderChoropleth(regMap, data.stateGeo, 'code_state_chr', lookup, 'coef', {
+    label: `Std. coef: ${yLabel}`, isPct: false, diverging: true,
+    tooltipFn: r => `<b>${r.state_name}</b> (n=${r.n_amc})<br><b>Coefficient:</b> ${r.coef.toFixed(3)}<br><b>95% CI:</b> [${r.ci_lower.toFixed(3)}, ${r.ci_upper.toFixed(3)}]<br><b>p-value:</b> ${r.p_value.toFixed(3)}`
+  });
+}
+
+function updateRegressionImages() {
+  const yMetric = document.getElementById('reg-y-sel').value;
+  document.getElementById('img-state-reg').src = `plots/state_reg_${yMetric}.png`;
+  document.getElementById('img-scatter').src = `plots/scatter_${yMetric}.png`;
+}
+
+async function updateRegression() {
+  await loadRegressionData();
+  updateRegressionCoefMap();
+  updateRegressionImages();
+  setTimeout(() => regMap.invalidateSize(), 100);
+}
+
+// ============================================================
+// Mode Switching
+// ============================================================
+
+function switchMode(mode) {
+  document.getElementById('app-title').textContent = TITLES[mode];
+
+  document.querySelectorAll('.ctrl').forEach(el => el.classList.remove('active'));
+  const ctrlId = mode === 'transformation' ? 'ctrl-transformation' : `ctrl-${mode}`;
+  document.getElementById(ctrlId).classList.add('active');
+
+  const isReg = mode === 'regression';
+  document.getElementById('map-view').style.display = isReg ? 'none' : 'flex';
+  document.getElementById('reg-view').style.display = isReg ? 'flex' : 'none';
+
+  if (!isReg) {
+    setTimeout(() => mainMap.invalidateSize(), 100);
+  }
+
+  switch (mode) {
+    case '1872': update1872(); break;
+    case '1920': update1920(); break;
+    case 'transformation': updateTransformation(); break;
+    case 'regression': updateRegression(); break;
+  }
+}
+
+function switchRegTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `pane-${tabId}`));
+  if (tabId === 'coef-map') setTimeout(() => regMap.invalidateSize(), 100);
+}
+
+// ============================================================
+// Event Handlers
+// ============================================================
+
+function setupEvents() {
+  document.querySelectorAll('input[name="mode"]').forEach(el =>
+    el.addEventListener('change', () => switchMode(el.value))
+  );
+
+  // 1872
+  document.querySelectorAll('input[name="geo1872"]').forEach(el =>
+    el.addEventListener('change', () => { populateGroups1872(); update1872(); })
+  );
+  document.querySelectorAll('input[name="groupType"]').forEach(el =>
+    el.addEventListener('change', () => { populateGroups1872(); update1872(); })
+  );
+  document.getElementById('group-sel-1872').addEventListener('change', () => update1872());
+  document.getElementById('metric-sel-1872').addEventListener('change', () => update1872());
+
+  // 1920
+  document.querySelectorAll('input[name="geo1920"]').forEach(el =>
+    el.addEventListener('change', () => { populateGroups1920(); update1920(); })
+  );
+  document.getElementById('group-sel-1920').addEventListener('change', () => update1920());
+  document.getElementById('metric-sel-1920').addEventListener('change', () => update1920());
+
+  // Transformation
+  document.querySelectorAll('input[name="geoTrans"]').forEach(el =>
+    el.addEventListener('change', () => updateTransformation())
+  );
+  document.getElementById('metric-sel-trans').addEventListener('change', () => updateTransformation());
+
+  // Regression
+  document.getElementById('reg-y-sel').addEventListener('change', () => {
+    updateRegressionCoefMap();
+    updateRegressionImages();
+  });
+
+  // Tabs
+  document.querySelectorAll('.tab-btn').forEach(btn =>
+    btn.addEventListener('click', () => switchRegTab(btn.dataset.tab))
+  );
+}
+
+// ============================================================
+// Init
+// ============================================================
 
 async function init() {
-  map = L.map("map").setView([-14, -52], 4);
+  mainMap = L.map('map').setView([-14, -52], 4);
+  regMap = L.map('reg-map').setView([-14, -52], 4);
 
-  const [panelRes, munRes, stateRes] = await Promise.all([
-    fetch("data/panel.json").then(r => r.json()),
-    fetch("data/mun.geojson").then(r => r.json()),
-    fetch("data/state.geojson").then(r => r.json())
-  ]);
+  populateSelect(document.getElementById('metric-sel-1872'),
+    METRICS_1872.map(m => ({ value: m.col, label: m.label })));
+  populateSelect(document.getElementById('metric-sel-1920'),
+    METRICS_1920.map(m => ({ value: m.col, label: m.label })));
+  populateSelect(document.getElementById('metric-sel-trans'),
+    METRICS_TRANS.map(m => ({ value: m.col, label: m.label })));
+  populateSelect(document.getElementById('reg-y-sel'),
+    REG_Y.map(r => ({ value: r.value, label: r.label })));
 
-  panelData = panelRes;
-  panelRows = columnarToRows(panelData);
-  munGeo = munRes;
-  stateGeo = stateRes;
-
-  document.getElementById("loading").remove();
-
-  populateMetrics();
-  populateGroups();
-
-  document.querySelectorAll('input[name="geo"]').forEach(el => el.addEventListener("change", () => { populateGroups(); updateMap(); }));
-  document.querySelectorAll('input[name="groupType"]').forEach(el => el.addEventListener("change", () => { populateGroups(); updateMap(); }));
-  document.getElementById("group-select").addEventListener("change", updateMap);
-  document.getElementById("metric-select").addEventListener("change", updateMap);
-
-  updateMap();
+  setupEvents();
+  await update1872().catch(console.error);
 }
 
 init();

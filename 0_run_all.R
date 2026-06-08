@@ -15,3 +15,6 @@ source("source/data_transformation.R")
 
 # To launch the Shiny dashboard:
 # shiny::runApp("app.R")
+
+# To export static site for GitHub Pages:
+# source("source/export_static.R")
